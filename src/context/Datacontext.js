@@ -1,5 +1,5 @@
 import { createContext, useEffect, useState } from "react";
-import { THINGSPEAK_URL } from "../utils/ThinkSpeak";
+
 
 
 export const DContext = createContext()
