@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchThingSpeakData } from '../../services/api';
 import DataCard from '../DataCard';
@@ -17,6 +17,8 @@ const Dashboard = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
 
+    // 🔥 Track last shown second (IMPORTANT)
+    const lastSecondRef = useRef(null);
     // Fetch ThingSpeak Data
     const fetchData = async () => {
         try {
@@ -33,11 +35,14 @@ const Dashboard = () => {
 
                 setData({ hr, spo2, ir, red });
 
+
                 // Calculate Blood Glucose
-                if (ir && red) {
+                if (ir && red && ir > 5000 && ir < 120000) {
                     const R = red / ir;
                     const glucoseValue = (120 * R) + 30;
                     setGlucose(glucoseValue.toFixed(2));
+                } else {
+                    setGlucose("Place finger properly");
                 }
 
                 // Prepare chart data for IR values
@@ -65,7 +70,7 @@ const Dashboard = () => {
         fetchData();
 
         // Poll API every 5 seconds
-        const interval = setInterval(fetchData, 5000);
+        const interval = setInterval(fetchData, 100);
 
         return () => clearInterval(interval);
     }, []);
@@ -99,11 +104,23 @@ const Dashboard = () => {
         xaxis: {
             type: 'datetime',
             title: {
-                text: 'Time',
-                style: {
-                    fontSize: '12px',
-                    fontWeight: 600,
-                },
+                text: 'Time (HH:MM:SS)',
+                style: { fontSize: '12px', fontWeight: 600, },
+            },
+            labels:
+            {
+                formatter:
+                    (value) => {
+                        const date = new Date(parseInt(value));
+                        return date.toLocaleTimeString('en-IN',
+                            {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                                hour12: false,
+                                timeZone: 'Asia/Kolkata',
+                            });
+                    }, style: { fontSize: '11px', },
             },
         },
         yaxis: {
@@ -114,17 +131,42 @@ const Dashboard = () => {
                     fontWeight: 600,
                 },
             },
+            forceNiceScale: true,
+            tickAmount: undefined,
+            stepSize: 5000,
+            labels: {
+                formatter: (value) => {
+                    return value ? value.toFixed(0) : '0';
+                },
+                style: {
+                    fontSize: '11px',
+                },
+            },
         },
         tooltip: {
             x: {
-                format: 'dd MMM HH:mm',
+                formatter: (value) => {
+                    const date = new Date(parseInt(value));
+                    return date.toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                        hour12: false,
+                    });
+                },
             },
             y: {
-                formatter: (value) => value.toFixed(2),
+                formatter: (value) => {
+                    return value ? value.toFixed(2) : '0.00';
+                },
+                title: {
+                    formatter: () => 'IR Value',
+                },
             },
         },
         grid: {
             borderColor: '#e5e7eb',
+            strokeDashArray: 4,
         },
     };
 
@@ -203,15 +245,17 @@ const Dashboard = () => {
                     />
                 </div>
                 {/* Chart */}
-                <div className="bg-white rounded-xl shadow-lg p-6">
+                <div className="bg-white rounded-xl shadow-lg p-6 overflow-x-auto">
                     <h2 className="text-xl font-bold text-gray-900 mb-4">IR Value Over Time</h2>
                     {chartData.length > 0 ? (
-                        <ReactApexChart
-                            options={chartOptions}
-                            series={chartSeries}
-                            type="line"
-                            height={350}
-                        />
+                        <div style={{ overflowX: 'auto', width: '100%' }}>
+                            <ReactApexChart
+                                options={chartOptions}
+                                series={chartSeries}
+                                type="line"
+                                height={chartData.length > 20 ? 450 : 350}
+                            />
+                        </div>
                     ) : (
                         <div className="flex items-center justify-center h-80 bg-gray-50 rounded-lg">
                             <p className="text-gray-500">Waiting for sensor data...</p>
@@ -226,7 +270,8 @@ const Dashboard = () => {
                         <div className="text-5xl font-bold text-green-600 mb-2">
                             {glucose ? glucose : '---'}
                         </div>
-                        <p className="text-gray-500 text-lg">mg/dL</p>
+                        {glucose && <p className="text-gray-500 text-lg">mg/dL</p>}
+
                         {glucose && (
                             <div className="mt-4 text-center">
                                 {/* <p className="text-sm text-gray-600">
@@ -244,7 +289,7 @@ const Dashboard = () => {
 
                 {/* Last Updated */}
                 <div className="mt-6 text-center">
-                   
+
                     <button
                         onClick={fetchData}
                         className="mt-3 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
