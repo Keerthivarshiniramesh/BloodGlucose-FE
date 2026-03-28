@@ -5,10 +5,12 @@ import DataCard from '../DataCard';
 import ReactApexChart from 'react-apexcharts';
 
 const Dashboard = () => {
+    const BeURL = process.env.REACT_APP_BeURL
+
     const navigate = useNavigate();
     const [data, setData] = useState({
-        hr: null,
-        spo2: null,
+        // hr: null,
+        // spo2: null,
         ir: null,
         red: null,
     });
@@ -28,30 +30,37 @@ const Dashboard = () => {
                 const latestFeed = response.feeds[response.feeds.length - 1];
 
                 // Parse field values
-                const hr = latestFeed.field1 ? parseInt(latestFeed.field1) : null;
-                const spo2 = latestFeed.field2 ? parseInt(latestFeed.field2) : null;
-                const ir = latestFeed.field3 ? parseFloat(latestFeed.field3) : null;
-                const red = latestFeed.field4 ? parseFloat(latestFeed.field4) : null;
+                // const hr = latestFeed.field1 ? parseInt(latestFeed.field1) : null;
+                // const spo2 = latestFeed.field2 ? parseInt(latestFeed.field2) : null;
+                const ir = latestFeed.field1 ? parseFloat(latestFeed.field1) : null;
+                const red = latestFeed.field2 ? parseFloat(latestFeed.field2) : null;
 
-                setData({ hr, spo2, ir, red });
+                setData({
+                    // hr, spo2,
+                    ir, red
+                });
 
 
                 // Calculate Blood Glucose
-                if (ir && red && ir > 5000 && ir < 120000) {
-                    const R = red / ir;
-                    const glucoseValue = (120 * R) + 30;
-                    setGlucose(glucoseValue.toFixed(2));
+
+                if (ir !== null && red !== null && ir > 5000 && ir < 120000) {
+                    const glucoseValue = await syncData();
+
+                    if (glucoseValue !== null) {
+                        setGlucose(glucoseValue.toFixed(2));
+                    }
                 } else {
                     setGlucose("Place finger properly");
                 }
 
+
                 // Prepare chart data for IR values
                 const chartPoints = response.feeds
-                    .filter(feed => feed.field3 !== null)
+                    .filter(feed => feed.field1 !== null)
                     .slice(-50)
                     .map(feed => ({
                         x: new Date(feed.created_at).getTime(),
-                        y: parseFloat(feed.field3),
+                        y: parseFloat(feed.field1),
                     }))
                     .sort((a, b) => a.x - b.x);
 
@@ -70,7 +79,7 @@ const Dashboard = () => {
         fetchData();
 
         // Poll API every 5 seconds
-        const interval = setInterval(fetchData, 100);
+        const interval = setInterval(fetchData, 5000);
 
         return () => clearInterval(interval);
     }, []);
@@ -177,7 +186,45 @@ const Dashboard = () => {
         },
     ];
 
-    if (loading && !data.hr) {
+    // useEffect(() => {
+
+    const syncData = async () => {
+        try {
+            const thinkSpeakRes = await fetch("https://api.thingspeak.com/channels/3309237/feeds.json?api_key=J46YG04B20GE3NV0&results");
+            const thinkSpeakData = await thinkSpeakRes.json();
+
+            const backendRes = await fetch(`${BeURL}/blood-glucose`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify(thinkSpeakData)
+            });
+
+            const result = await backendRes.json();
+
+            return result.glucose; // ✅ now works
+        } catch (error) {
+            console.error("Error syncing data:", error);
+            return null;
+        }
+    };
+
+    // if (BeURL) {
+    //     // First call immediately
+    //     syncData();
+
+    //     // Then repeat every 5 seconds
+    //     const interval = setInterval(syncData, 5000);
+
+    //     // Cleanup (IMPORTANT)
+    //     return () => clearInterval(interval);
+    // }
+
+    // }, [BeURL]);
+
+    if (loading && !data.ir) {
         return (
             <div className="min-h-screen flex items-center justify-center">
                 <div className="text-center">
@@ -215,20 +262,7 @@ const Dashboard = () => {
 
                 {/* Data Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                    <DataCard
-                        title="Heart Rate"
-                        value={data.hr}
-                        unit="bpm"
-                        color="red"
-                        icon={<span className="text-2xl">❤️</span>}
-                    />
-                    <DataCard
-                        title="SpO2 (Oxygen)"
-                        value={data.spo2}
-                        unit="%"
-                        color="blue"
-                        icon={<span className="text-2xl">🫁</span>}
-                    />
+
                     <DataCard
                         title="IR Value"
                         value={data.ir ? data.ir.toFixed(2) : null}
@@ -303,3 +337,19 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+
+
+{/* <DataCard
+                        title="Heart Rate"
+                        value={data.hr}
+                        unit="bpm"
+                        color="red"
+                        icon={<span className="text-2xl">❤️</span>}
+                    />
+                    <DataCard
+                        title="SpO2 (Oxygen)"
+                        value={data.spo2}
+                        unit="%"
+                        color="blue"
+                        icon={<span className="text-2xl">🫁</span>}
+                    /> */}
